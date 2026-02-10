@@ -1,36 +1,56 @@
 # Decision Log — Skylark Ops Coordinator Agent
 
-## Key assumptions
+A short note on the choices we made while building this, and how we read the brief.
 
-- **Data source:** Pilot roster, drone fleet, and missions are the single source of truth. We assume `current_assignment` on pilots uses the same ID as `project_id` in missions (e.g. PRJ001) so that overlap and conflict checks work. Sample data uses "Project-A" for one pilot; for full conflict detection, roster assignments should use project_id (PRJ001, PRJ002, etc.).
-- **Google Sheets:** 2-way sync means: (1) all reads come from Sheets when configured, (2) pilot status and assignment updates are written back to the Pilot Roster sheet, and (3) drone status updates are written back to the Drone Fleet sheet. Missions are read-only from the agent’s perspective (no write to missions).
-- **Empty value:** Empty assignment/cells are normalized to "–" (en-dash) for consistency between CSV and Sheets.
-- **Conversational interface:** The agent works without an LLM using intent/keyword matching so it runs with no API key. Optional OpenAI can be added later for freer language.
+---
 
-## Trade-offs
+## What we assumed
 
-- **Intent-based agent vs full LLM:** We chose keyword/regex intents so the prototype works offline and without API keys. Trade-off: less flexible phrasing; user must use natural but recognizable phrases. With more time we’d add an optional LLM layer for open-ended questions.
-- **Single worksheet per sheet:** We assume one worksheet per Google Sheet (default "Sheet1"). Multiple tabs would require sheet names in env or UI.
-- **Conflict “double booking”:** With one `current_assignment` per pilot, true double booking only appears when assigning a pilot to a second project with overlapping dates. We block that at assignment time and run conflict checks that compare project dates and roster state.
+**Data and sheets**  
+We treated the pilot roster, drone fleet, and missions as the single source of truth. For conflict checks (e.g. overlapping dates), we assume roster assignments use the same IDs as in missions (PRJ001, PRJ002, etc.). The sample data had “Project-A” in one place—we kept that in mind; in a full setup, sticking to project_id everywhere keeps conflicts accurate.  
 
-## “Urgent reassignments” — interpretation
+Google Sheets “2-way sync” here means: we *read* everything from Sheets when it’s configured, and we *write* back pilot status/assignments to the Pilot Roster and drone status to the Drone Fleet. Missions are read-only from the agent’s side; we didn’t add create/update for missions in this version. Empty assignments are normalized to a dash (–) so CSV and Sheets stay consistent.
 
-We interpret **urgent reassignments** as: *when a project needs immediate coverage (e.g. pilot unavailable, drone in maintenance), the agent should suggest alternative pilots and drones and surface conflicts that could block the reassignment.*
+**Conversation without an LLM**  
+We wanted the agent to work out of the box without API keys or internet. So we went with intent-style handling (keywords and a bit of regex) instead of a full LLM. The downside is that phrasing has to be somewhat recognizable; the upside is it runs anywhere and stays predictable. If we had more time, we’d add an optional LLM layer for more natural, open-ended chat.
 
-Implementation:
+---
 
-- **`suggest_urgent_reassignment(project_id)`** returns:
-  - Suggested pilots (available, same location, matching skills/certs, available by project start).
-  - Suggested drones (available, same location, matching capabilities).
-  - Count of drones in maintenance.
-  - Full conflict summary (double booking, skill/cert mismatch, drone in maintenance, location mismatch).
+## Trade-offs we’re aware of
 
-The user can then say e.g. *“Urgent reassignment for PRJ002”* and get a single response with who can be assigned, which drones to use, and what to fix (conflicts) before confirming.
+**Intent-based vs LLM**  
+We chose “good enough” understanding so the prototype is self-contained. Users need to phrase things in a natural but fairly standard way (e.g. “Who is available?”, “Set P001 status to On Leave”). We’re okay with that for a first version.
 
-## What we’d do differently with more time
+**One worksheet per Sheet**  
+We assume each Google Sheet has one main tab (the default “Sheet1”). If you use multiple tabs, we’d need to extend config (or the UI) to pick which sheet name to use.
 
-- Add optional **OpenAI (or local LLM)** for true conversational understanding and follow-up questions.
-- **Missions sheet writes:** Allow creating/updating mission rows from the agent (e.g. new project, date change) with sync back to Sheets.
-- **Audit log:** Log all status and assignment changes with timestamp and user for accountability.
-- **Tests:** Unit tests for `ops` and `sheets_sync`, and integration tests with mock Sheets.
-- **Richer matching:** Consider pilot preference, travel cost, and drone–pilot compatibility in suggestions.
+**Double-booking**  
+Each pilot has only one `current_assignment` in the roster. So “double booking” really shows up when we *try* to assign the same pilot to a second project whose dates overlap with the first. We block that at assign-time and also run conflict checks so we can report overlapping projects and who’s on what.
+
+---
+
+## How we read “urgent reassignments”
+
+We took **urgent reassignments** to mean: *when a project needs coverage quickly (e.g. someone’s unavailable or a drone is in maintenance), the agent should suggest who else can take it, which drones fit, and what might get in the way.*
+
+So we added a single flow: you say something like *“Urgent reassignment for PRJ002”* and the agent returns in one go:
+
+- **Suggested pilots** — available, right location, right skills/certs, and free by the project start date  
+- **Suggested drones** — available, same location, right capabilities  
+- **Conflicts** — double-booking, skill/cert mismatches, drones in maintenance, location mismatches  
+
+That way the coordinator gets one screen of “here’s who and what you can use, and here’s what to fix” before confirming anything. No extra back-and-forth.
+
+---
+
+## What we’d do next with more time
+
+- **Optional LLM** — Plug in OpenAI (or a local model) for freer conversation and follow-up questions while keeping the current intent flow as fallback.  
+- **Missions in the agent** — Let the agent create or update mission rows and sync those back to Sheets, not just read them.  
+- **Audit trail** — Log every status and assignment change (who, when, what) for accountability.  
+- **Tests** — Unit tests for `ops` and `sheets_sync`, plus a few integration tests with mocked Sheets.  
+- **Smarter matching** — Factor in things like pilot preference, travel, or drone–pilot fit when suggesting assignments.
+
+---
+
+Thanks for reading. If something here doesn’t match what you had in mind, we’re happy to adjust.
