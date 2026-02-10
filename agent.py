@@ -70,8 +70,14 @@ def _handle_message_impl(text: str) -> str:
         df = ops.get_current_assignments()
         return f"**Current assignments:**\n\n{_df_to_markdown(df)}"
 
-    if re.search(r"(set|update|mark|change|put).* (pilot )?status", text) or re.search(r"(pilot )?status.* (to )?(available|on leave|unavailable)", text):
-        # e.g. "set P001 status to On Leave"
+    # Status update: "set P001 status to On Leave" or "set P001 to on leave" or "mark P002 on leave" etc.
+    is_status_cmd = (
+        re.search(r"(set|update|mark|change|put).* (pilot )?status", text)
+        or re.search(r"(pilot )?status.* (to )?(available|on leave|unavailable)", text)
+        or re.search(r"(set|update|mark|put).* (p\d{3}).* (to )?(on leave|available|unavailable)", text)
+        or (any(x in text for x in ["p001", "p002", "p003", "p004"]) and any(s in text for s in ["on leave", "available", "unavailable"]) and any(w in text for w in ["set", "update", "mark", "put", "change"]))
+    )
+    if is_status_cmd:
         pid = None
         for x in ["p001", "p002", "p003", "p004"]:
             if x in text:
@@ -86,7 +92,9 @@ def _handle_message_impl(text: str) -> str:
             new_status = "Unavailable"
         try:
             ops.update_pilot_status(pid, new_status)
-            return f"Updated **{pid}** status to **{new_status}** and synced to sheet."
+            if config.use_google_sheets():
+                return f"Updated **{pid}** status to **{new_status}** and synced to Google Sheet."
+            return f"Updated **{pid}** status to **{new_status}** (saved locally). To sync to Google Sheet, add your Sheet IDs and credentials in .env or in the app's Secrets.)"
         except Exception as e:
             return f"Could not update: {e}"
 
@@ -166,7 +174,9 @@ def _handle_message_impl(text: str) -> str:
                 new_status = "Deployed"
             try:
                 ops.update_drone_status(did, new_status)
-                return f"Updated drone **{did}** to **{new_status}** and synced to sheet."
+                if config.use_google_sheets():
+                    return f"Updated drone **{did}** to **{new_status}** and synced to Google Sheet."
+                return f"Updated drone **{did}** to **{new_status}** (saved locally). Add Sheet IDs and credentials to sync to Google Sheet.)"
             except Exception as e:
                 return f"Update failed: {e}"
         df = sheets_sync.read_drone_fleet()

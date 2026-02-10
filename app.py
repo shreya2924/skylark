@@ -5,11 +5,15 @@ Streamlit conversational UI.
 import os
 import streamlit as st
 
-# Make Streamlit Cloud Secrets visible to config (before importing config)
-if hasattr(st, "secrets") and st.secrets:
-    for k, v in st.secrets.items():
-        if isinstance(v, str) and k not in os.environ:
-            os.environ[k] = v
+# Make Streamlit Cloud Secrets visible to config (before importing config).
+# Locally, skip if secrets aren't set up—use .env instead.
+try:
+    if hasattr(st, "secrets") and st.secrets:
+        for k, v in st.secrets.items():
+            if isinstance(v, str) and k not in os.environ:
+                os.environ[k] = v
+except Exception:
+    pass
 
 import config
 from agent import handle_message
