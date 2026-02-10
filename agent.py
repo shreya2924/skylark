@@ -29,6 +29,13 @@ def handle_message(user_text: str) -> str:
     if not text:
         return "You can ask me about pilot roster, assignments, drones, conflicts, or urgent reassignments. What do you need?"
 
+    try:
+        return _handle_message_impl(text)
+    except Exception as e:
+        return f"Something went wrong while processing your request. Please try again or rephrase. (Details: {e})"
+
+def _handle_message_impl(text: str) -> str:
+    """Inner implementation; raises on unexpected errors."""
     # --- Roster ---
     if re.search(r"show (all )?pilots|list (all )?pilots|(all )?pilots roster", text):
         df = sheets_sync.read_pilot_roster()
@@ -176,7 +183,9 @@ def handle_message(user_text: str) -> str:
         if all_c["drone_maintenance_assigned"]:
             parts.append("**Drone in maintenance but assigned:**\n" + _list_to_bullets([str(x) for x in all_c["drone_maintenance_assigned"]]))
         if all_c["location_mismatch"]:
-            parts.append("**Location mismatch:**\n" + _list_to_bullets([str(x) for x in all_c["location_mismatch"]]))
+            parts.append("**Pilot–project location mismatch:**\n" + _list_to_bullets([str(x) for x in all_c["location_mismatch"]]))
+        if all_c.get("pilot_drone_location_mismatch"):
+            parts.append("**Pilot and drone in different locations:**\n" + _list_to_bullets([str(x) for x in all_c["pilot_drone_location_mismatch"]]))
         if not any(all_c.values()):
             return "No conflicts detected."
         return "\n\n".join(parts) if parts else "No conflicts detected."

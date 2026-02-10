@@ -4,6 +4,16 @@ A short note on the choices we made while building this, and how we read the bri
 
 ---
 
+## Tech stack and why we chose it
+
+- **Python** — Fast to build with, great for data (pandas) and APIs (gspread). Fits a 6-hour timeline and is easy to run locally or on Streamlit Cloud.
+- **Streamlit** — Gives a conversational UI (chat, sidebar) with minimal code and no separate front end. Easy to deploy and share via link.
+- **Google Sheets API + gspread** — Direct 2-way sync with sheets the client might already use. Service-account auth keeps setup simple and avoids per-user OAuth.
+- **Pandas** — Roster, fleet, and missions are tabular; pandas makes filtering, matching, and date checks straightforward.
+- **No LLM by default** — We used intent/keyword handling so the app works without API keys or internet. Optional OpenAI could be added later for freer conversation.
+
+---
+
 ## What we assumed
 
 **Data and sheets**  
@@ -26,6 +36,9 @@ We assume each Google Sheet has one main tab (the default “Sheet1”). If you 
 
 **Double-booking**  
 Each pilot has only one `current_assignment` in the roster. So “double booking” really shows up when we *try* to assign the same pilot to a second project whose dates overlap with the first. We block that at assign-time and also run conflict checks so we can report overlapping projects and who’s on what.
+
+**Error handling**  
+We handle errors so the app never crashes on bad input or Sheets/network issues: (1) All agent actions that can fail (status update, assign, drone update) are in try/except and return a short, user-friendly message. (2) The whole message handler is wrapped in a top-level try/except so any unexpected error still returns a clear message instead of a stack trace. (3) When Google Sheets isn’t configured or a read fails, we fall back to local CSV so the app still runs.
 
 ---
 

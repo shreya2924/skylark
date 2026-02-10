@@ -271,7 +271,7 @@ def check_drone_maintenance_assigned() -> List[Dict[str, Any]]:
     ].to_dict("records")
 
 def check_location_mismatch() -> List[Dict[str, Any]]:
-    """Pilot and their assigned project (or assigned drone) in different locations."""
+    """Pilot and their assigned project in different locations."""
     pilots = sheets_sync.read_pilot_roster()
     missions = sheets_sync.read_missions()
     mismatches = []
@@ -295,12 +295,41 @@ def check_location_mismatch() -> List[Dict[str, Any]]:
             })
     return mismatches
 
+def check_pilot_drone_location_mismatch() -> List[Dict[str, Any]]:
+    """Pilot and assigned drone in different locations (same project). Edge case."""
+    pilots = sheets_sync.read_pilot_roster()
+    drones = sheets_sync.read_drone_fleet()
+    missions = sheets_sync.read_missions()
+    mismatches = []
+    for _, p in pilots.iterrows():
+        assign = p.get("current_assignment", "")
+        if str(assign).strip() == EMPTY:
+            continue
+        ploc = str(p.get("location", "")).strip().lower()
+        # Drones assigned to same project
+        assigned_drones = drones[
+            (drones["current_assignment"].astype(str).str.strip() == str(assign).strip())
+        ]
+        for _, d in assigned_drones.iterrows():
+            dloc = str(d.get("location", "")).strip().lower()
+            if ploc != dloc:
+                mismatches.append({
+                    "pilot_id": p["pilot_id"],
+                    "pilot_name": p["name"],
+                    "pilot_location": p["location"],
+                    "drone_id": d.get("drone_id"),
+                    "drone_location": d.get("location"),
+                    "project": assign,
+                })
+    return mismatches
+
 def run_all_conflicts() -> Dict[str, List]:
     return {
         "double_booking": check_pilot_double_booking(),
         "skill_cert_mismatch": check_skill_cert_mismatch(),
         "drone_maintenance_assigned": check_drone_maintenance_assigned(),
         "location_mismatch": check_location_mismatch(),
+        "pilot_drone_location_mismatch": check_pilot_drone_location_mismatch(),
     }
 
 # --- Urgent reassignments ---
